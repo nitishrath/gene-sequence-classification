@@ -8,6 +8,7 @@ import datetime
 from model import CNN
 from sklearn.utils import shuffle
 from tensorflow.contrib import learn
+import matplotlib.pyplot as plt
 
 
 
@@ -21,7 +22,7 @@ tf.flags.DEFINE_string("filter_sizes", '3,4,5', "Comma-separated filter sizes (d
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 128, "Batch Size (default: 64)")
-tf.flags.DEFINE_integer("num_epochs", 5000, "Number of training epochs (default: 200)")
+tf.flags.DEFINE_integer("num_epochs", 15000, "Number of training epochs (default: 200)")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Save model after this many steps (default: 100)")
 tf.flags.DEFINE_integer("num_checkpoints", 10, "Number of checkpoints to store (default: 5)")
@@ -73,7 +74,7 @@ print len(y_train)
 # Randomly shuffle data
 
 x_shuffled,y_shuffled = shuffle(x_train,y_train)
-
+loss_aggregate=[]
 
 
 # Training
@@ -114,19 +115,6 @@ with tf.Graph().as_default():
         out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
         print("Writing to {}\n".format(out_dir))
 
-        # Summaries for loss and accuracy
-        loss_summary = tf.summary.scalar("loss", cnn.loss)
-        acc_summary = tf.summary.scalar("accuracy", cnn.accuracy)
-
-        # Train Summaries
-        train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
-        train_summary_dir = os.path.join(out_dir, "summaries", "train")
-        train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
-
-        # Dev summaries
-        dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
-        dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
-        dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
 
         # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
         checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
@@ -163,49 +151,33 @@ with tf.Graph().as_default():
               cnn.input_y: y_batch,
               cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
             }
-            _, step, summaries, loss, accuracy = sess.run(
-                [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
+            _, step, loss, accuracy = sess.run(
+                [train_op, global_step, cnn.loss, cnn.accuracy],
                 feed_dict)
-            time_str = datetime.datetime.now().isoformat()
-            print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-            train_summary_writer.add_summary(summaries, step)
-
-        def dev_step(x_batch, y_batch, writer=None):
-            """
-            Evaluates model on a dev set
-            """
-            feed_dict = {
-              cnn.input_x: x_batch,
-              cnn.input_y: y_batch,
-              cnn.dropout_keep_prob: 1.0
-            }
-            step, summaries, loss, accuracy = sess.run(
-                [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
-                feed_dict)
-            time_str = datetime.datetime.now().isoformat()
-            score=cnn.scores
-            print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy ))
-            if writer:
-                writer.add_summary(summaries, step)
+            print("step {}, loss {:g}, acc {:g}".format(step, loss, accuracy))
+            return step,loss
 
         batches = batch_iter(
             list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
-
+        step_epoch=(int)(2000/FLAGS.batch_size)+1
         # Training loop. For each batch...
         for batch in batches:
             x_batch, y_batch = zip(*batch)
             x_batch=np.resize(np.array(x_batch),(np.shape(x_batch)[0],14,4,1))
             y_batch=np.resize(np.array(y_batch),(np.shape(x_batch)[0],2))
-            train_step(x_batch, y_batch)
+            step,loss=train_step(x_batch, y_batch)
+            if step %(50*step_epoch)==0:
+                loss_aggregate.append( loss)
             current_step = tf.train.global_step(sess, global_step)
-            '''
-            if current_step % FLAGS.evaluate_every == 0:
-                print("\nEvaluation:")
-                x_dev=np.resize(np.array(x_dev),(400,14,4,1))
-                y_dev=np.resize(np.array(y_dev),(400,2))
-                dev_step(x_dev, y_dev, writer=dev_summary_writer)
-                print("")
-                '''
             if current_step % FLAGS.checkpoint_every == 0:
                 path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                 print("Saved model checkpoint to {}\n".format(path))
+x=range(len(loss_aggregate))
+x=[i*50 for i in x]
+plt.plot(x, loss_aggregate)
+plt.xlabel('Epochs')
+plt.ylabel('loss')
+plt.title('Loss vs Epochs')
+plt.grid(True)
+plt.savefig("fig"+(str)(FLAGS.num_epochs) +".png")
+plt.show()

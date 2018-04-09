@@ -12,7 +12,7 @@ import csv
 
 # Eval Parameters
 tf.flags.DEFINE_integer("batch_size", 128, "Batch Size (default: 64)")
-tf.flags.DEFINE_string("checkpoint_dir", "/home/nitish/Desktop/transcription prediction/runs/1523171129/checkpoints", "Checkpoint directory from training run")
+tf.flags.DEFINE_string("checkpoint_dir", "/home/nitish/Desktop/transcription prediction/runs/1523233696/checkpoints", "Checkpoint directory from training run")
 tf.flags.DEFINE_boolean("eval_train", False, "Evaluate on all training data")
 
 # Misc Parameters
